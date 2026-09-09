@@ -62,11 +62,11 @@
                     <h2 id="preview-title">Signature preview</h2>
                 </div>
                 <div class="canvas-frame">
-                    <canvas id="signature-canvas" width="1200" height="420" aria-label="Staff signature preview">
+                    <canvas id="signature-canvas" width="1600" height="600" aria-label="Staff signature preview">
                         Your browser does not support the canvas element required to preview the signature.
                     </canvas>
                 </div>
-                <p class="preview-note">The final visual treatment is a configurable starting point and will be refined with approved MAU brand assets.</p>
+                <p class="preview-note">The preview is the exact 1600 × 600 PNG that will be downloaded, scaled here to fit your screen.</p>
             </section>
         </section>
     </main>

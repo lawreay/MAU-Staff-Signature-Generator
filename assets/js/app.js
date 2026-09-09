@@ -18,6 +18,7 @@ const requiredInputs = [
 const renderer = createSignatureRenderer(canvas, mauStaffSignatureTemplate);
 let photoImage = null;
 let photoObjectUrl = null;
+let photoVersion = 0;
 
 function formState() {
     return {
@@ -56,6 +57,7 @@ async function updatePreview() {
 }
 
 async function loadPhoto(file) {
+    const version = ++photoVersion;
     if (photoObjectUrl) {
         URL.revokeObjectURL(photoObjectUrl);
         photoObjectUrl = null;
@@ -74,14 +76,23 @@ async function loadPhoto(file) {
     }
 
     photoObjectUrl = URL.createObjectURL(file);
+    const selectedObjectUrl = photoObjectUrl;
     const image = new Image();
     image.onload = async () => {
+        if (version !== photoVersion) {
+            URL.revokeObjectURL(selectedObjectUrl);
+            return;
+        }
         photoImage = image;
         setStatus("");
         await updatePreview();
     };
     image.onerror = async () => {
-        URL.revokeObjectURL(photoObjectUrl);
+        if (version !== photoVersion) {
+            URL.revokeObjectURL(selectedObjectUrl);
+            return;
+        }
+        URL.revokeObjectURL(selectedObjectUrl);
         photoObjectUrl = null;
         photoInput.value = "";
         setStatus("The selected image could not be read. Please choose another file.");
@@ -108,6 +119,7 @@ requiredInputs.forEach((input) => {
 
 form.addEventListener("reset", () => {
     window.setTimeout(async () => {
+        photoVersion += 1;
         if (photoObjectUrl) {
             URL.revokeObjectURL(photoObjectUrl);
             photoObjectUrl = null;
@@ -125,7 +137,18 @@ downloadButton.addEventListener("click", () => {
         return;
     }
     requiredInputs.forEach((input) => input.removeAttribute("aria-invalid"));
-    renderer.download();
+    const safePosition = document.querySelector("#position").value
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 64);
+    const filename = safePosition ? `mau-${safePosition}-signature.png` : "mau-staff-signature.png";
+    renderer.download(filename).catch(() => {
+        setStatus("The signature could not be downloaded. Please try again.");
+    });
 });
 
 updatePreview();

@@ -20,6 +20,18 @@ function roundedRect(context, x, y, width, height, radius) {
     context.closePath();
 }
 
+function fontValue(style, family, size = style.size) {
+    return `${style.weight} ${size}px ${family}`;
+}
+
+function drawLetterSpacedText(context, text, x, y, spacing) {
+    let cursor = x;
+    for (const character of text) {
+        context.fillText(character, cursor, y);
+        cursor += context.measureText(character).width + spacing;
+    }
+}
+
 function drawCoverImage(context, image, frame) {
     const scale = Math.max(frame.width / image.naturalWidth, frame.height / image.naturalHeight);
     const width = image.naturalWidth * scale;
@@ -27,7 +39,63 @@ function drawCoverImage(context, image, frame) {
     context.drawImage(image, frame.x + (frame.width - width) / 2, frame.y + (frame.height - height) / 2, width, height);
 }
 
-function drawPhoto(context, image, layout, colors) {
+function truncateToWidth(context, text, maxWidth) {
+    if (context.measureText(text).width <= maxWidth) {
+        return text;
+    }
+
+    const suffix = "…";
+    let shortened = text;
+    while (shortened && context.measureText(`${shortened}${suffix}`).width > maxWidth) {
+        shortened = shortened.slice(0, -1);
+    }
+    return `${shortened}${suffix}`;
+}
+
+function drawFittedLine(context, text, x, y, style, family, color, maxWidth) {
+    let size = style.size;
+    while (size > style.minSize) {
+        context.font = fontValue(style, family, size);
+        if (context.measureText(text).width <= maxWidth) {
+            break;
+        }
+        size -= 1;
+    }
+    context.font = fontValue(style, family, size);
+    context.fillStyle = color;
+    context.fillText(truncateToWidth(context, text, maxWidth), x, y);
+}
+
+function wrapText(context, text, maxWidth, maxLines) {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = "";
+
+    for (const word of words) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (context.measureText(candidate).width <= maxWidth) {
+            line = candidate;
+            continue;
+        }
+        if (line) {
+            lines.push(line);
+        }
+        line = truncateToWidth(context, word, maxWidth);
+    }
+    if (line) {
+        lines.push(line);
+    }
+
+    if (lines.length <= maxLines) {
+        return lines;
+    }
+    const visibleLines = lines.slice(0, maxLines);
+    visibleLines[maxLines - 1] = truncateToWidth(context, `${visibleLines[maxLines - 1]}…`, maxWidth);
+    return visibleLines;
+}
+
+function drawPhoto(context, image, template) {
+    const { colors, layout, typography, branding } = template;
     const frame = layout.photo;
     context.save();
     roundedRect(context, frame.x, frame.y, frame.width, frame.height, frame.radius);
@@ -39,15 +107,22 @@ function drawPhoto(context, image, layout, colors) {
         drawCoverImage(context, image, frame);
     } else {
         context.fillStyle = colors.muted;
-        context.font = "600 18px Arial, Helvetica, sans-serif";
+        context.font = fontValue(typography.photoPlaceholder, typography.family);
         context.textAlign = "center";
-        context.fillText("Staff photo", frame.x + frame.width / 2, frame.y + frame.height / 2);
+        context.fillText(branding.photoPlaceholder, frame.x + frame.width / 2, frame.y + frame.height / 2);
     }
+    context.restore();
+
+    context.save();
+    roundedRect(context, frame.x, frame.y, frame.width, frame.height, frame.radius);
+    context.lineWidth = frame.borderWidth;
+    context.strokeStyle = colors.white;
+    context.stroke();
     context.restore();
 }
 
 function drawLogo(context, image, template) {
-    const { colors, layout } = template;
+    const { colors, layout, typography, branding } = template;
     const frame = layout.logo;
     if (image) {
         const ratio = Math.min(frame.width / image.naturalWidth, frame.height / image.naturalHeight);
@@ -57,12 +132,26 @@ function drawLogo(context, image, template) {
         return;
     }
 
-    context.fillStyle = colors.navy;
-    context.font = "700 27px Arial, Helvetica, sans-serif";
     context.textAlign = "center";
-    context.fillText("MAU", frame.x + frame.width / 2, frame.y + 43);
+    context.fillStyle = colors.navy;
+    context.font = fontValue(typography.fallback, typography.family);
+    context.fillText(branding.logoFallback, frame.x + frame.width / 2, frame.y + frame.height / 2 - 7);
     context.fillStyle = colors.gold;
-    context.fillRect(frame.x + 20, frame.y + 55, frame.width - 40, 3);
+    context.fillRect(frame.x + frame.fallbackRuleInset, frame.y + frame.fallbackRuleY, frame.width - frame.fallbackRuleInset * 2, frame.fallbackRuleHeight);
+}
+
+function drawDecorations(context, template) {
+    const { colors, layout } = template;
+    const decoration = layout.decorations;
+    context.fillStyle = colors.navy;
+    context.fillRect(layout.photoPanel.x, layout.photoPanel.y, layout.photoPanel.width, layout.photoPanel.height);
+    context.fillStyle = colors.gold;
+    context.fillRect(decoration.sideGoldBar.x, decoration.sideGoldBar.y, decoration.sideGoldBar.width, decoration.sideGoldBar.height);
+    context.fillRect(decoration.contentGoldBar.x, decoration.contentGoldBar.y, decoration.contentGoldBar.width, decoration.contentGoldBar.height);
+    context.fillRect(decoration.topShape.x, decoration.topShape.y, decoration.topShape.width, decoration.topShape.height);
+    context.fillStyle = colors.decoration;
+    context.fillRect(decoration.paleBlock.x, decoration.paleBlock.y, decoration.paleBlock.width, decoration.paleBlock.height);
+    context.fillRect(decoration.paleLine.x, decoration.paleLine.y, decoration.paleLine.width, decoration.paleLine.height);
 }
 
 export function createSignatureRenderer(canvas, template) {
@@ -70,59 +159,83 @@ export function createSignatureRenderer(canvas, template) {
     const { canvas: dimensions, branding, colors, layout, typography } = template;
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
 
-    // A missing official logo is expected during setup; rendering continues with a text fallback.
+    // The official logo is optional during setup; a missing asset deliberately resolves to a safe fallback.
     const logoPromise = loadImage(new URL(branding.logoPath, window.location.href).href);
+    let renderVersion = 0;
 
     async function render(state) {
+        const version = ++renderVersion;
         const logo = await logoPromise;
+        if (version !== renderVersion) {
+            return;
+        }
+
         context.clearRect(0, 0, dimensions.width, dimensions.height);
-        context.fillStyle = colors.white;
+        context.fillStyle = colors.background;
         context.fillRect(0, 0, dimensions.width, dimensions.height);
-
-        context.fillStyle = colors.navy;
-        context.fillRect(0, 0, dimensions.width, 18);
-        context.fillStyle = colors.gold;
-        context.fillRect(0, layout.topRuleY, dimensions.width, 5);
-        drawPhoto(context, state.photoImage, layout, colors);
-
-        context.strokeStyle = colors.gold;
-        context.lineWidth = 3;
-        context.beginPath();
-        context.moveTo(layout.dividerX, 65);
-        context.lineTo(layout.dividerX, 300);
-        context.stroke();
+        drawDecorations(context, template);
+        drawPhoto(context, state.photoImage, template);
+        drawLogo(context, logo, template);
 
         context.textAlign = "left";
-        context.fillStyle = colors.navy;
-        context.font = `700 ${typography.institutionSize}px ${typography.family}`;
-        context.fillText(branding.institutionName, layout.contentX, layout.institutionY);
         context.fillStyle = colors.blue;
-        context.font = `600 ${typography.positionSize}px ${typography.family}`;
-        context.fillText(state.position || "Position", layout.contentX, layout.positionY);
-        context.fillStyle = colors.ink;
-        context.font = `${typography.contactSize}px ${typography.family}`;
-        context.fillText(`T: ${state.phoneOne || "Phone number"}`, layout.contentX, layout.contactsY);
-        if (state.phoneTwo) {
-            context.fillText(`T: ${state.phoneTwo}`, layout.contentX, layout.contactsY + 33);
-        }
-        context.fillText(`E: ${state.email || "Email address"}`, layout.contentX, layout.contactsY + 66);
+        context.font = fontValue(typography.descriptor, typography.family);
+        drawLetterSpacedText(context, branding.signatureDescriptor, layout.content.x, layout.header.descriptorY, typography.descriptor.letterSpacing);
 
         context.fillStyle = colors.navy;
-        context.fillRect(0, 330, dimensions.width, 90);
+        context.font = fontValue(typography.institution, typography.family);
+        context.fillText(branding.institutionName, layout.content.x, layout.header.institutionY);
+        context.fillStyle = colors.gold;
+        context.fillRect(layout.content.x, layout.header.ruleY, layout.header.ruleWidth, layout.header.ruleHeight);
+
+        context.fillStyle = colors.navy;
+        context.font = fontValue(typography.position, typography.family);
+        const positionLines = wrapText(context, state.position || "Position", typography.position.maxWidth, typography.position.maxLines);
+        positionLines.forEach((line, index) => {
+            context.fillText(line, layout.content.x, layout.position.y + index * typography.position.lineHeight);
+        });
+
+        const contactMaxWidth = Math.min(typography.contact.maxWidth, layout.content.right - layout.content.x);
+        let contactY = layout.contacts.firstY;
+        drawFittedLine(context, `T: ${state.phoneOne || "Phone number"}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+        if (state.phoneTwo) {
+            contactY += layout.contacts.lineHeight;
+            drawFittedLine(context, `T: ${state.phoneTwo}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+        }
+        contactY += layout.contacts.lineHeight;
+        drawFittedLine(context, `E: ${state.email || "Email address"}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+
+        context.fillStyle = colors.navy;
+        context.fillRect(0, layout.footer.y, dimensions.width, layout.footer.height);
         context.fillStyle = colors.white;
-        context.font = `${typography.smallSize}px ${typography.family}`;
-        context.fillText(branding.website, layout.padding, layout.footerY);
+        context.font = fontValue(typography.footer, typography.family);
+        context.textAlign = "left";
+        context.fillText(branding.website, layout.footer.websiteX, layout.footer.baselineY);
         context.textAlign = "right";
-        context.fillText(branding.motto, dimensions.width - layout.padding, layout.footerY);
-        drawLogo(context, logo, template);
+        context.fillText(branding.motto, layout.footer.mottoRight, layout.footer.baselineY);
     }
 
-    function download(filename = "mau-staff-signature.png") {
-        const link = document.createElement("a");
-        link.download = filename;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
+    function download(filename) {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("The signature image could not be prepared for download."));
+                    return;
+                }
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.setTimeout(() => URL.revokeObjectURL(url), 0);
+                resolve();
+            }, "image/png");
+        });
     }
 
     return Object.freeze({ render, download });

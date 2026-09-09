@@ -14,9 +14,21 @@ The application uses plain PHP only as a shared-hosting-compatible entry point. 
 
 There is no database, upload endpoint, or server-side image processing. A selected staff photograph is read from the user's device with browser APIs and rendered directly onto the canvas. This keeps personal images off the hosting server and makes the project suitable for ordinary PHP shared hosting.
 
-## Current status
+## Current status — Phase 2
 
-The foundation is complete: responsive form and preview layout, client-side photo selection, validation, a configurable canvas rendering path, reset handling, and client-side PNG download are in place. The rendered signature is an initial configurable layout, not a final approved MAU brand design.
+The application now produces the MAU staff signature as a fixed **1600 × 600 pixel** Canvas graphic. The preview is the same canvas used for export: it scales visually to fit the page but the downloaded PNG keeps its full dimensions.
+
+The institutional layout has a navy photo panel, gold accents, controlled university branding, a logo area, staff position and contact details, plus a footer containing the MAU website and motto: `Knowledge | Truth | Service`. Only the photograph, position, phone numbers, and email address are supplied by the staff member.
+
+Photographs are processed only in the browser using an object URL and automatically cover-cropped inside a rounded frame; no file is posted to PHP or stored on the server. The renderer uses the browser's native `canvas.toBlob()` API to create the PNG download. The filename is safely derived from the entered position where possible, for example `mau-it-officer-signature.png`.
+
+All institutional visual settings, including dimensions, colours, typography, spacing, decorative elements, branding copy, and logo placement, remain in `templates/mau-staff-signature.js`.
+
+## Current limitations
+
+- The approved `assets/images/mau-logo.png` file has not yet been supplied. The renderer displays a safe `MAU` text fallback and continues to work when the image is missing.
+- Photo cropping is automatic cover-cropping only. There are no manual crop, zoom, or positioning controls.
+- This release provides one fixed MAU template only.
 
 ## Run locally
 
@@ -30,6 +42,6 @@ Then open `http://localhost:8000`. The application also works when deployed to a
 
 ## Planned next steps
 
-1. Add the approved `assets/images/mau-logo.png` asset.
-2. Confirm MAU's final signature specification, including the approved motto, website presentation, fonts, dimensions, and contact labels.
-3. Refine the canvas template against that approved design and test output in target email clients.
+1. Add the approved `assets/images/mau-logo.png` asset and verify its placement against MAU brand guidance.
+2. Review generated PNGs in the intended email clients.
+3. Consider manual photo crop controls in a later phase if they are required.
