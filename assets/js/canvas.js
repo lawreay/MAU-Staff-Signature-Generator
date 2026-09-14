@@ -24,14 +24,6 @@ function fontValue(style, family, size = style.size) {
     return `${style.weight} ${size}px ${family}`;
 }
 
-function drawLetterSpacedText(context, text, x, y, spacing) {
-    let cursor = x;
-    for (const character of text) {
-        context.fillText(character, cursor, y);
-        cursor += context.measureText(character).width + spacing;
-    }
-}
-
 function drawCoverImage(context, image, frame) {
     const scale = Math.max(frame.width / image.naturalWidth, frame.height / image.naturalHeight);
     const width = image.naturalWidth * scale;
@@ -140,6 +132,24 @@ function drawLogo(context, image, template) {
     context.fillRect(frame.x + frame.fallbackRuleInset, frame.y + frame.fallbackRuleY, frame.width - frame.fallbackRuleInset * 2, frame.fallbackRuleHeight);
 }
 
+function drawContactRow(context, markerLabel, value, baselineY, template, maxWidth) {
+    const { colors, layout, typography } = template;
+    const marker = layout.contacts.marker;
+    const centerX = marker.x + marker.size / 2;
+    const centerY = baselineY - marker.baselineOffset;
+    context.beginPath();
+    context.arc(centerX, centerY, marker.size / 2, 0, Math.PI * 2);
+    context.fillStyle = colors.blue;
+    context.fill();
+
+    context.fillStyle = colors.white;
+    context.font = fontValue(typography.contactMarker, typography.family);
+    context.textAlign = "center";
+    context.fillText(markerLabel, centerX, centerY + marker.textBaselineOffset);
+    context.textAlign = "left";
+    drawFittedLine(context, value, marker.textX, baselineY, typography.contact, typography.family, colors.ink, maxWidth);
+}
+
 function drawDecorations(context, template) {
     const { colors, layout } = template;
     const decoration = layout.decorations;
@@ -148,10 +158,19 @@ function drawDecorations(context, template) {
     context.fillStyle = colors.gold;
     context.fillRect(decoration.sideGoldBar.x, decoration.sideGoldBar.y, decoration.sideGoldBar.width, decoration.sideGoldBar.height);
     context.fillRect(decoration.contentGoldBar.x, decoration.contentGoldBar.y, decoration.contentGoldBar.width, decoration.contentGoldBar.height);
-    context.fillRect(decoration.topShape.x, decoration.topShape.y, decoration.topShape.width, decoration.topShape.height);
-    context.fillStyle = colors.decoration;
-    context.fillRect(decoration.paleBlock.x, decoration.paleBlock.y, decoration.paleBlock.width, decoration.paleBlock.height);
-    context.fillRect(decoration.paleLine.x, decoration.paleLine.y, decoration.paleLine.width, decoration.paleLine.height);
+    context.fillRect(decoration.logoAccent.x, decoration.logoAccent.y, decoration.logoAccent.width, decoration.logoAccent.height);
+
+    const ornament = decoration.ornament;
+    const centerX = ornament.x + ornament.width;
+    const centerY = ornament.y + ornament.height / 2;
+    context.strokeStyle = colors.decoration;
+    context.lineWidth = ornament.lineWidth;
+    context.beginPath();
+    context.arc(centerX, centerY, ornament.width / 2, ornament.startAngle, ornament.endAngle);
+    context.stroke();
+    context.beginPath();
+    context.arc(centerX, centerY, ornament.width / 2 - ornament.inset, ornament.startAngle, ornament.endAngle);
+    context.stroke();
 }
 
 export function createSignatureRenderer(canvas, template) {
@@ -181,10 +200,6 @@ export function createSignatureRenderer(canvas, template) {
         drawLogo(context, logo, template);
 
         context.textAlign = "left";
-        context.fillStyle = colors.blue;
-        context.font = fontValue(typography.descriptor, typography.family);
-        drawLetterSpacedText(context, branding.signatureDescriptor, layout.content.x, layout.header.descriptorY, typography.descriptor.letterSpacing);
-
         context.fillStyle = colors.navy;
         context.font = fontValue(typography.institution, typography.family);
         context.fillText(branding.institutionName, layout.content.x, layout.header.institutionY);
@@ -198,15 +213,15 @@ export function createSignatureRenderer(canvas, template) {
             context.fillText(line, layout.content.x, layout.position.y + index * typography.position.lineHeight);
         });
 
-        const contactMaxWidth = Math.min(typography.contact.maxWidth, layout.content.right - layout.content.x);
+        const contactMaxWidth = Math.min(typography.contact.maxWidth, layout.content.right - layout.contacts.marker.textX);
         let contactY = layout.contacts.firstY;
-        drawFittedLine(context, `T: ${state.phoneOne || "Phone number"}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+        drawContactRow(context, branding.telephoneMarker, state.phoneOne || "Phone number", contactY, template, contactMaxWidth);
         if (state.phoneTwo) {
             contactY += layout.contacts.lineHeight;
-            drawFittedLine(context, `T: ${state.phoneTwo}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+            drawContactRow(context, branding.telephoneMarker, state.phoneTwo, contactY, template, contactMaxWidth);
         }
         contactY += layout.contacts.lineHeight;
-        drawFittedLine(context, `E: ${state.email || "Email address"}`, layout.content.x, contactY, typography.contact, typography.family, colors.ink, contactMaxWidth);
+        drawContactRow(context, branding.emailMarker, state.email || "Email address", contactY, template, contactMaxWidth);
 
         context.fillStyle = colors.navy;
         context.fillRect(0, layout.footer.y, dimensions.width, layout.footer.height);

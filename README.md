@@ -18,7 +18,7 @@ There is no database, upload endpoint, or server-side image processing. A select
 
 The application now produces the MAU staff signature as a fixed **1600 × 600 pixel** Canvas graphic. The preview is the same canvas used for export: it scales visually to fit the page but the downloaded PNG keeps its full dimensions.
 
-The institutional layout has a navy photo panel, gold accents, controlled university branding, a logo area, staff position and contact details, plus a footer containing the MAU website and motto: `Knowledge | Truth | Service`. Only the photograph, position, phone numbers, and email address are supplied by the staff member.
+The refined institutional layout has a navy photo panel with a 316 × 348 pixel framed photograph, a prominent university heading, contact badges, a protected upper-right logo area, and a restrained line ornament that balances the composition. Gold accents align the main grid, while the footer contains the MAU website and motto: `Knowledge | Truth | Service`. Only the photograph, position, phone numbers, and email address are supplied by the staff member.
 
 Photographs are processed only in the browser using an object URL and automatically cover-cropped inside a rounded frame; no file is posted to PHP or stored on the server. The renderer uses the browser's native `canvas.toBlob()` API to create the PNG download. The filename is safely derived from the entered position where possible, for example `mau-it-officer-signature.png`.
 
